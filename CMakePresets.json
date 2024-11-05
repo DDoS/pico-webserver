@@ -1,0 +1,46 @@
+{
+    "version": 6,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 23,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "base",
+            "displayName": "Base",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build",
+            "cacheVariables": {
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+                "CMAKE_BUILD_TYPE": "Release",
+                "PICO_BOARD": "pico2"
+            }
+        }
+
+    ],
+    "buildPresets": [
+        {
+            "name": "base",
+            "displayName": "Base",
+            "configurePreset": "base",
+            "verbose": false
+        }
+    ],
+    "workflowPresets": [
+        {
+            "name": "base",
+            "displayName": "Base",
+            "steps": [
+                {
+                    "type": "configure",
+                    "name": "base"
+                },
+                {
+                    "type": "build",
+                    "name": "base"
+                }
+            ]
+        }
+    ]
+}

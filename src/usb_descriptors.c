@@ -1,4 +1,4 @@
-/* 
+/*
  * The MIT License (MIT)
  *
  * Copyright (c) 2019 Ha Thach (tinyusb.org)
@@ -30,11 +30,11 @@
  * Same VID/PID with different interface e.g MSC (first), then CDC (later) will possibly cause system error on PC.
  *
  * Auto ProductID layout's Bitmap:
- *   [MSB]       NET | VENDOR | MIDI | HID | MSC | CDC          [LSB]
+ *   [MSB]       ECM_RNDIS | VENDOR | MIDI | HID | MSC | CDC       [LSB]
  */
 #define _PID_MAP(itf, n)  ( (CFG_TUD_##itf) << (n) )
 #define USB_PID           (0x4000 | _PID_MAP(CDC, 0) | _PID_MAP(MSC, 1) | _PID_MAP(HID, 2) | \
-                           _PID_MAP(MIDI, 3) | _PID_MAP(VENDOR, 4) | _PID_MAP(NET, 5) )
+                           _PID_MAP(MIDI, 3) | _PID_MAP(VENDOR, 4) | _PID_MAP(ECM_RNDIS, 5) )
 
 // String Descriptor Index
 enum
@@ -74,7 +74,7 @@ tusb_desc_device_t const desc_device =
     .bDeviceClass       = TUSB_CLASS_MISC,
     .bDeviceSubClass    = MISC_SUBCLASS_COMMON,
     .bDeviceProtocol    = MISC_PROTOCOL_IAD,
-    
+
     .bMaxPacketSize0    = CFG_TUD_ENDPOINT0_SIZE,
 
     .idVendor           = 0xCafe,
@@ -194,7 +194,7 @@ uint16_t const* tud_descriptor_string_cb(uint8_t index, uint16_t langid)
   {
     pico_unique_board_id_t id;
     pico_get_unique_board_id(&id);
-    
+
     for (unsigned i=0; i<sizeof(id.id); i++)
     {
       _desc_str[1+chr_count++] = "0123456789ABCDEF"[(id.id[i] >> 4) & 0xf];

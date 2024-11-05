@@ -1,31 +1,52 @@
-cmake_minimum_required(VERSION 3.13)
+cmake_minimum_required(VERSION 3.23)
 
-# We prefer to have all linked submodules at toplevel
-set(PICO_TINYUSB_PATH ${CMAKE_CURRENT_SOURCE_DIR}/tinyusb)
-
-include(pico-sdk/pico_sdk_init.cmake)
+include("pico-sdk/pico_sdk_init.cmake")
 project(pico_webserver)
+
 pico_sdk_init()
 
-# LWIP
-set(LWIP_DIR ${CMAKE_CURRENT_SOURCE_DIR}/lwip)
-set (LWIP_INCLUDE_DIRS
-    "${LWIP_DIR}/src/include"
-    "${CMAKE_CURRENT_SOURCE_DIR}"
-)
-include(${LWIP_DIR}/src/Filelists.cmake)
+file(GLOB fs_files CONFIGURE_DEPENDS "fs/*")
+add_custom_command(OUTPUT "include/fsdata.h"
+    DEPENDS ${fs_files}
+    WORKING_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}"
+    COMMAND perl "pico-sdk/lib/lwip/src/apps/http/makefsdata/makefsdata"
+    COMMAND mv "fsdata.c" "include/fsdata.h")
+add_custom_target(fsdata DEPENDS "include/fsdata.h")
+
+add_library(lwipopts INTERFACE)
+target_include_directories(lwipopts INTERFACE
+    "include/lwip")
+add_dependencies(lwipopts fsdata)
+
+add_library(tusb_config INTERFACE)
+target_include_directories(tusb_config INTERFACE
+    "include/tusb")
 
 # Extra stuff from TinyUSB, that is not part of tinyusb_device library
-set(TINYUSB_LIBNETWORKING_SOURCES
-    ${PICO_TINYUSB_PATH}/lib/networking/dhserver.c
-    ${PICO_TINYUSB_PATH}/lib/networking/rndis_reports.c
+add_library(tinyusb_lib_networking STATIC
+    "${PICO_TINYUSB_PATH}/lib/networking/dhserver.c"
+    "${PICO_TINYUSB_PATH}/lib/networking/rndis_reports.c")
+target_include_directories(tinyusb_lib_networking PUBLIC
+    "${PICO_TINYUSB_PATH}/lib/networking")
+target_link_libraries(tinyusb_lib_networking PUBLIC
+    lwipopts
+    tusb_config
+    pico_stdlib
+    tinyusb_device
+    pico_lwip
+    pico_lwip_http)
+
+add_executable(pico_webserver
+    "src/webserver.c"
+    "src/tusb_lwip_glue.c"
+    "src/usb_descriptors.c"
 )
+target_compile_definitions(pico_webserver PRIVATE PICO_ENTER_USB_BOOT_ON_EXIT=1)
+target_include_directories(pico_webserver PRIVATE "include")
+target_link_libraries(pico_webserver PRIVATE
+    pico_unique_id
+    tinyusb_lib_networking)
 
-add_executable(${PROJECT_NAME} webserver.c tusb_lwip_glue.c usb_descriptors.c ${TINYUSB_LIBNETWORKING_SOURCES})
-
-pico_enable_stdio_usb(${PROJECT_NAME} 0)
-pico_enable_stdio_uart(${PROJECT_NAME} 0)
-target_include_directories(${PROJECT_NAME} PRIVATE ${LWIP_INCLUDE_DIRS} ${PICO_TINYUSB_PATH}/src ${PICO_TINYUSB_PATH}/lib/networking)
-target_link_libraries(${PROJECT_NAME} pico_stdlib pico_unique_id tinyusb_device lwipallapps lwipcore)
-pico_add_extra_outputs(${PROJECT_NAME})
-target_compile_definitions(${PROJECT_NAME} PRIVATE PICO_ENTER_USB_BOOT_ON_EXIT=1)
+pico_enable_stdio_usb(pico_webserver 0)
+pico_enable_stdio_uart(pico_webserver 0)
+pico_add_extra_outputs(pico_webserver)
