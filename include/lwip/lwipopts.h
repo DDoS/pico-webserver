@@ -51,6 +51,7 @@
 #define ETHARP_SUPPORT_STATIC_ENTRIES   1
 
 #define LWIP_HTTPD_CGI                  1
+#define LWIP_HTTPD_SUPPORT_POST         1
 #ifndef LWIP_HTTPD_SSI
 #define LWIP_HTTPD_SSI                  0
 #define LWIP_HTTPD_SSI_INCLUDE_TAG      0
