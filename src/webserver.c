@@ -1,13 +1,18 @@
-#include "hardware/structs/watchdog.h"
-#include "hardware/watchdog.h"
-#include "pico/bootrom.h"
-#include "pico/stdlib.h"
+#include <hardware/structs/watchdog.h>
+#include <hardware/watchdog.h>
 
+#include <pico/bootrom.h>
+#include <pico/stdlib.h>
+#include <pico/multicore.h>
+
+#include "encre_file.h"
+#include "GDEP073E01.h"
 #include "tusb_lwip_glue.h"
 
-#define LED_PIN 25
-
-static void *current_connection = NULL;
+static void *current_connection;
+static struct encre_file file;
+static semaphore_t receive_file_semaphore;
+static semaphore_t display_file_semaphore;
 
 err_t httpd_post_begin(void *connection, const char *uri,
         const char *http_request, u16_t http_request_len,
@@ -19,43 +24,40 @@ err_t httpd_post_begin(void *connection, const char *uri,
     LWIP_UNUSED_ARG(post_auto_wnd);
 
     snprintf(response_uri, response_uri_len, "/empty");
+    if (current_connection) {
+        return ERR_VAL;
+    }
 
-    static const char led[] = "/led";
-    if (memcmp(uri, led, sizeof(led)) == 0) {
-        if (current_connection != connection) {
-            current_connection = connection;
-            return ERR_OK;
-        }
+    static const char image[] = "/image";
+    if (memcmp(uri, image, sizeof(image)) == 0 &&
+            sem_acquire_timeout_ms(&receive_file_semaphore, 500)) {
+        current_connection = connection;
+        begin_encre_file(&file);
+        return ERR_OK;
     }
 
     return ERR_VAL;
 }
 
 err_t httpd_post_receive_data(void *connection, struct pbuf *p) {
-    err_t ret;
-    if (current_connection == connection) {
-        int led_state = pbuf_try_get_at(p, 0);
-        if (led_state >= 0) {
-            led_state = led_state != '0';
-            gpio_put(LED_PIN, led_state);
-        }
-        ret = ERR_OK;
-    } else {
-        ret = ERR_VAL;
-    }
-
-    pbuf_free(p);
-
-    return ret;
+    return continue_encre_file(&file, p) ? ERR_OK : ERR_VAL;
 }
 
 void httpd_post_finished(void *connection, char *response_uri,
         u16_t response_uri_len) {
 
     snprintf(response_uri, response_uri_len, "/empty");
+    current_connection = NULL;
+    sem_release(&display_file_semaphore);
+}
 
-    if (current_connection == connection) {
-        current_connection = NULL;
+void core1_entry() {
+    while (true) {
+        sem_acquire_blocking(&display_file_semaphore);
+        if (file.read_colors) {
+            GDEP073E01_write_image(file.colors);
+        }
+        sem_release(&receive_file_semaphore);
     }
 }
 
@@ -66,9 +68,10 @@ int main() {
     dhcpd_init();
     httpd_init();
 
-    // For toggle_led
-    gpio_init(LED_PIN);
-    gpio_set_dir(LED_PIN, GPIO_OUT);
+    sem_init(&receive_file_semaphore, 1, 1);
+    sem_init(&display_file_semaphore, 0, 1);
+
+    multicore_launch_core1(core1_entry);
 
     while (true) {
         tud_task();
